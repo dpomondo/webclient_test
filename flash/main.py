@@ -1,7 +1,10 @@
+import machine
 from machine import Pin, I2C
 import socket
 import time
 import ssd1306
+import binascii
+from umqtt.simple import MQTTClient
 # import dht
 import credentials
 import device
@@ -12,7 +15,8 @@ display = ssd1306.SSD1306_I2C(device.DISPL_WIDTH, device.DISPL_HEIGHT, i2c)
 text_width = int(device.DISPL_WIDTH / 6)
 # d = dht.DHT11(Pin(4))
 LED_builtin = Pin(2, Pin.OUT)
-
+CLIENT_ID = binascii.hexlify(machine.unique_id())
+TOPIC = b"test/webserver"
 
 def do_connect():
     import network
@@ -53,6 +57,26 @@ def http_get(url, port):
         else:
             break
     s.close()
+
+
+loops = 0
+
+
+def mqtt_loop(server=credentials.PI_IP_PORT, port=1883):
+    global loops
+    c = MQTTClient(CLIENT_ID, "192.168.10.67")
+    c.connect()
+    print("Connected to %s, waiting for button presses" % server)
+    while True:
+        print(f"Sending {loops}")
+        display.fill(0)
+        display.text(f"{loops}-->{TOPIC}", 3, 3, 1)
+        display.show()
+        c.publish(TOPIC, f"{loops}")
+        time.sleep_ms(1000 * 8)
+        loops += 1
+
+    c.disconnect()
 
 
 def connect_to_pi(data):
@@ -110,10 +134,11 @@ def get_dht_results():
 
 def run_the_stuff():
     do_connect()
+    mqtt_loop()
     # http_get('http://micropython.org/ks/test.html')
     # d.measure()
     # print(f"temp: {d.temperature()}\thumidity: {d.humidity()}")
-    while True:
+    while False:
         for i in range(1000):
             connect_to_pi(i)
             time.sleep(10)
