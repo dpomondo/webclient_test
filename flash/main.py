@@ -68,13 +68,14 @@ def mqtt_loop(server=credentials.PI_IP_PORT, port=1883):
     c.connect()
     print("Connected to %s, waiting for button presses" % server)
     while True:
-        print(f"Sending {loops}")
-        display.fill(0)
-        display.text(f"{loops}-->{TOPIC}", 3, 3, 1)
-        display.show()
-        c.publish(TOPIC, f"{loops}")
-        time.sleep_ms(1000 * 8)
-        loops += 1
+        for loops in range(1000):
+            print(f"Sending {loops}")
+            display.fill(0)
+            display.text(f"{loops}-->", 3, 3, 1)
+            display.text(f"   {TOPIC}", 3, 13, 1)
+            display.show()
+            c.publish(TOPIC, f"{loops}")
+            time.sleep_ms(1000 * 8)
 
     c.disconnect()
 
