@@ -4,7 +4,7 @@ import socket
 import time
 import ssd1306
 import binascii
-from umqtt.simple import MQTTClient
+from umqtt.robust import MQTTClient
 # import dht
 import credentials
 import device
@@ -12,11 +12,17 @@ import device
 # using default address 0x3C
 i2c = I2C(sda=Pin(4), scl=Pin(5))
 display = ssd1306.SSD1306_I2C(device.DISPL_WIDTH, device.DISPL_HEIGHT, i2c)
+display.rotate(True)
 text_width = int(device.DISPL_WIDTH / 6)
 # d = dht.DHT11(Pin(4))
 LED_builtin = Pin(2, Pin.OUT)
 CLIENT_ID = binascii.hexlify(machine.unique_id())
 TOPIC = b"test/webserver"
+# SUB_TOPIC = b"test/littleguy"
+SUB_TOPIC = "test/littleguy"
+
+loops = 0
+
 
 def do_connect():
     import network
@@ -34,12 +40,12 @@ def do_connect():
         while not wlan.isconnected():
             LED_builtin.value(~LED_builtin.value())
     # message = f"network config: {wlan.ifconfig('addr4')}"
-    message = f"ip: {wlan.ifconfig()[0]} connect: {wlan.isconnected()}"
-    print(message)
-    message_new = message.split(' ')
+    message = [f"ip: {wlan.ifconfig()[0]}", f"connect: {wlan.isconnected()}"]
+    print(message[0] + " " + message[1])
     display.fill(0)
-    for index in range(len(message_new)):
-        display.text(message_new[index], 0, (10 * index), 1)
+    for index in range(len(message)):
+        display.text(message[index], 0, (10 * index), 1)
+    display.rotate(True)
     display.show()
 
 
@@ -59,25 +65,37 @@ def http_get(url, port):
     s.close()
 
 
-loops = 0
+def subscribe_callback(topic, message):
+    output = f"{message}<--recv"
+    print(output)
+    display.rect(0, 23, 64, 33, 0)
+    display.text(output, 3, 23, 1)
+    display.show()
 
 
-def mqtt_loop(server=credentials.PI_IP_PORT, port=1883):
+def mqtt_loop(server=credentials.PI_IP_ADDRESS, port=1883):
     global loops
-    c = MQTTClient(CLIENT_ID, "192.168.10.67")
+    # c = MQTTClient(CLIENT_ID, "192.168.10.67")
+    c = MQTTClient(CLIENT_ID, server)
     c.connect()
-    print("Connected to %s, waiting for button presses" % server)
-    while True:
-        for loops in range(1000):
-            print(f"Sending {loops}")
-            display.fill(0)
-            display.text(f"{loops}-->", 3, 3, 1)
-            display.text(f"   {TOPIC}", 3, 13, 1)
-            display.show()
-            c.publish(TOPIC, f"{loops}")
-            time.sleep_ms(1000 * 8)
-
-    c.disconnect()
+    c.set_callback(subscribe_callback)
+    c.subscribe(SUB_TOPIC)
+    print(f"connected to {server}, subscribed to {SUB_TOPIC}")
+    try:
+        while True:
+            for loops in range(1000):
+                print(f"Sending {loops}")
+                display.fill(0)
+                display.text(f"{loops}-->", 3, 3, 1)
+                display.text(f"   {TOPIC}", 3, 13, 1)
+                display.rotate(True)
+                display.show()
+                c.publish(TOPIC, f"{loops}")
+                for i in range(1000 * 8):
+                    c.check_msg()
+                    time.sleep_ms(1)
+    finally:
+        c.disconnect()
 
 
 def connect_to_pi(data):
@@ -125,6 +143,7 @@ def connect_to_pi(data):
             # display.show()
         else:
             break
+    display.rotate(True)
     display.show()
     sock.close()
 
