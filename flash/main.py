@@ -1,10 +1,11 @@
 import machine
-from machine import Pin, I2C
+from machine import Pin, I2C, RTC
 import socket
 import time
 import ssd1306
 import binascii
 from umqtt.robust import MQTTClient
+import ntptime
 # import dht
 import credentials
 import device
@@ -19,10 +20,9 @@ LED_builtin = Pin(2, Pin.OUT)
 CLIENT_ID = binascii.hexlify(machine.unique_id())
 TOPIC = b"test/webserver"
 # SUB_TOPIC = b"test/littleguy"
-SUB_TOPIC = "test/littleguy"
+SUB_TOPIC = b"test/littleguy"
 
-loops = 0
-
+rtc = RTC()
 
 def do_connect():
     import network
@@ -49,103 +49,43 @@ def do_connect():
     display.show()
 
 
-def http_get(url, port):
-    _, _, host, path = url.split('/', 3)
-    # addr = socket.getaddrinfo(host, 5000)[0][-1]
-    addr = socket.getaddrinfo(host, port)[0][-1]
-    s = socket.socket()
-    s.connect(addr)
-    s.send(bytes('GET /%s HTTP/1.0\r\nHost: %s\r\n\r\n' % (path, host), 'utf8'))
-    while True:
-        data = s.recv(100)
-        if data:
-            print(str(data, 'utf8'), end='')
-        else:
-            break
-    s.close()
-
-
 def subscribe_callback(topic, message):
-    output = f"{message}<--recv"
+    output = f"{message.decode()}<--recv"
     print(output)
-    display.rect(0, 23, 64, 33, 0)
+    display.fill_rect(0, 23, 128, 33, 0)
     display.text(output, 3, 23, 1)
     display.show()
 
 
 def mqtt_loop(server=credentials.PI_IP_ADDRESS, port=1883):
-    global loops
     # c = MQTTClient(CLIENT_ID, "192.168.10.67")
     c = MQTTClient(CLIENT_ID, server)
     c.connect()
     c.set_callback(subscribe_callback)
     c.subscribe(SUB_TOPIC)
-    print(f"connected to {server}, subscribed to {SUB_TOPIC}")
+    print(f"connected to {server}, subscribed to {SUB_TOPIC.decode()}")
     try:
         while True:
             for loops in range(1000):
+                # (year, month, day, weekday, hours, minutes, seconds, subseconds)                
+                n = rtc.datetime()
+                now_iso = f"{n[0]}-{n[1]:02}-{n[2]:02}" + \
+                    f" {n[4]:02}:{n[5]:02}:{n[6]:02}"
+                send = str({"timestamp": {"time:": now_iso, "tz": "UTC"},
+                            "device": device.DEVICE_NAME,
+                           "temp": {"result": loops, "sensor": "aht20"}})
                 print(f"Sending {loops}")
                 display.fill(0)
-                display.text(f"{loops}-->", 3, 3, 1)
-                display.text(f"   {TOPIC}", 3, 13, 1)
+                display.text(f"{loops}", 3, 3, 1)
+                display.text(f"{now_iso} UTC", 3, 13, 1)
                 display.rotate(True)
                 display.show()
-                c.publish(TOPIC, f"{loops}")
-                for i in range(1000 * 8):
+                c.publish(TOPIC, send.encode())
+                for i in range(8):
                     c.check_msg()
-                    time.sleep_ms(1)
+                    time.sleep_ms(1000)
     finally:
         c.disconnect()
-
-
-def connect_to_pi(data):
-    # pi_addr = "192.168.0.24"
-    # pi_port = 80
-    # addr = socket.getaddrinfo(pi_addr, 5000)[0][-1]
-    addr = socket.getaddrinfo(
-        credentials.PI_IP_ADDRESS, credentials.PI_IP_PORT)[0][-1]
-    sock = socket.socket()
-    try:
-        sock.connect(addr)
-    except OSError as ERROR:
-        print(
-            "failed to connect to socket: bad port maybe" +
-            f"{credentials.PI_IP_PORT}\n{ERROR}")
-        return
-    sock.send(bytes(
-        f"GET /query-data?data={data} HTTP/1.0\r\nHost: " +
-        f"{credentials.PI_IP_ADDRESS}\r\n\r\n",
-        'utf-8'))
-    display.fill(0)
-    display.text(f"{data}", 0, 0, 1)
-    while True:
-        received = sock.recv(500)
-        if received:
-            received = str(received, 'utf8')
-            print(received,  end='')
-            if device.DISPL_WIDTH <= 64:
-                received.replace('\r', ' ').replace('\n', ' ')
-                message_new = received.split(' ')
-            else:
-                message_new = received.split('\n')
-                message_new = received.split('\r')
-            # I have no idea why this works, but it does
-            # without the `- 1` in the range the data overwrites the first
-            # characters of the first line. ALso, bare lengths in the
-            # range(..) cause index out of range errors
-
-            # for index in range(len(message_new) - 1):
-            for index in range(min(3, len(message_new)) - 1):
-                displ_temp = f"{message_new[index]}"
-                print(displ_temp)
-                display.text(displ_temp, 0, 11 + (10 * index), 1)
-            # display.text(f"{message_new[0][:8]}", 0, 10, 1)
-            # display.show()
-        else:
-            break
-    display.rotate(True)
-    display.show()
-    sock.close()
 
 
 def get_dht_results():
@@ -154,14 +94,11 @@ def get_dht_results():
 
 def run_the_stuff():
     do_connect()
+    print("Setting time...")
+    ntptime.settime()
+    print(f"time is {rtc.datetime()} UTC")
+
     mqtt_loop()
-    # http_get('http://micropython.org/ks/test.html')
-    # d.measure()
-    # print(f"temp: {d.temperature()}\thumidity: {d.humidity()}")
-    while False:
-        for i in range(1000):
-            connect_to_pi(i)
-            time.sleep(10)
 
 
 if __name__ == "__main__":
