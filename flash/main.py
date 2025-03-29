@@ -9,9 +9,11 @@ import ntptime
 # import dht
 import credentials
 import device
+from aht20 import aht20
 
 # using default address 0x3C
 i2c = I2C(sda=Pin(4), scl=Pin(5))
+sensor = aht20(i2c)
 display = ssd1306.SSD1306_I2C(device.DISPL_WIDTH, device.DISPL_HEIGHT, i2c)
 display.rotate(True)
 text_width = int(device.DISPL_WIDTH / 6)
@@ -67,16 +69,18 @@ def mqtt_loop(server=credentials.PI_IP_ADDRESS, port=1883):
     try:
         while True:
             for loops in range(1000):
+                sensor.take_measurement()
                 # (year, month, day, weekday, hours, minutes, seconds, subseconds)                
                 n = rtc.datetime()
                 now_iso = f"{n[0]}-{n[1]:02}-{n[2]:02}" + \
-                    f" {n[4]:02}:{n[5]:02}:{n[6]:02}"
+                    f"T{n[4]:02}:{n[5]:02}:{n[6]:02}Z"
                 send = str({"timestamp": {"time:": now_iso, "tz": "UTC"},
                             "device": device.DEVICE_NAME,
-                           "temp": {"result": loops, "sensor": "aht20"}})
+                           "temp_f": {"result": sensor.temperature_f, "sensor": "aht20"},
+                            "humidity": {"result": sensor.humidity, "sensor": "aht20"}})
                 print(f"Sending {loops}")
                 display.fill(0)
-                display.text(f"{loops}", 3, 3, 1)
+                display.text(f"{sensor.temperature_f}F {sensor.humidity}", 3, 3, 1)
                 display.text(f"{now_iso} UTC", 3, 13, 1)
                 display.rotate(True)
                 display.show()
