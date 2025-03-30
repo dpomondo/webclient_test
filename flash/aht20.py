@@ -52,7 +52,7 @@ class aht20:
         self._read_from()
         return self._buff[0]
 
-    def take_measurement(self):
+    def _take_measurement(self):
         send_buf = bytearray(3)
 
         send_buf[0] = 0xAC
@@ -63,24 +63,40 @@ class aht20:
         while self.state & self.AHT20_BUSY_FLAG:
             time.sleep(1)
         self._read_from()
-        temp = (self._buff[1] << 12) | (self._buff[2] << 4) | (self._buff[3] >> 4)
-        self._humidity = (temp * 100) / 0x100000
-        temp = ((self._buff[3] & 0xF) << 16) | (self._buff[4] << 8) | (self._buff[5])
-        self._temperature = ((temp / 0x100000) * 200) - 50
+        scratch = (self._buff[1] << 12) | (
+            self._buff[2] << 4) | (self._buff[3] >> 4)
+        self._humidity = (scratch * 100) / 0x100000
+        scratch = ((self._buff[3] & 0x0F) << 16) | (
+            self._buff[4] << 8) | (self._buff[5])
+        self._temperature = ((scratch / 0x100000) * 200) - 50
 
     @property
     def temperature(self):
         if self._temperature is None:
-            self.take_measurement()
+            self._take_measurement()
+        if time.ticks_diff(self._next_read, time.ticks_ms()) < 0:
+            self._take_measurement()
+            self._next_read = time.ticks_add(
+                time.ticks_ms(), self.AHT20_MEASURE_DELTA)
         return self._temperature
 
     @property
     def temperature_f(self):
+        if self._temperature is None:
+            self._take_measurement()
+        if time.ticks_diff(self._next_read, time.ticks_ms()) < 0:
+            self._take_measurement()
+            self._next_read = time.ticks_add(
+                time.ticks_ms(), self.AHT20_MEASURE_DELTA)
         return (self._temperature * 9/5) + 32
 
     @property
     def humidity(self):
         """The humidity property."""
         if self._humidity is None:
-            self.take_measurement()
+            self._take_measurement()
+        if time.ticks_diff(self._next_read, time.ticks_ms()) < 0:
+            self._take_measurement()
+            self._next_read = time.ticks_add(
+                time.ticks_ms(), self.AHT20_MEASURE_DELTA)
         return self._humidity

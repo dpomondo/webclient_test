@@ -26,6 +26,7 @@ SUB_TOPIC = b"test/littleguy"
 
 rtc = RTC()
 
+
 def do_connect():
     import network
     wlan = network.WLAN(network.STA_IF)
@@ -68,26 +69,28 @@ def mqtt_loop(server=credentials.PI_IP_ADDRESS, port=1883):
     print(f"connected to {server}, subscribed to {SUB_TOPIC.decode()}")
     try:
         while True:
-            for loops in range(1000):
-                sensor.take_measurement()
-                # (year, month, day, weekday, hours, minutes, seconds, subseconds)                
-                n = rtc.datetime()
-                now_iso = f"{n[0]}-{n[1]:02}-{n[2]:02}" + \
-                    f"T{n[4]:02}:{n[5]:02}:{n[6]:02}Z"
-                send = str({"timestamp": {"time:": now_iso, "tz": "UTC"},
-                            "device": device.DEVICE_NAME,
-                           "temp_f": {"result": sensor.temperature_f, "sensor": "aht20"},
-                            "humidity": {"result": sensor.humidity, "sensor": "aht20"}})
-                print(f"Sending {loops}")
-                display.fill(0)
-                display.text(f"{sensor.temperature_f}F {sensor.humidity}", 3, 3, 1)
-                display.text(f"{now_iso} UTC", 3, 13, 1)
-                display.rotate(True)
-                display.show()
-                c.publish(TOPIC, send.encode())
-                for i in range(8):
-                    c.check_msg()
-                    time.sleep_ms(1000)
+            sensor.take_measurement()
+            # (year, month, day, weekday, hours, minutes, seconds, subseconds)
+            n = rtc.datetime()
+            now_iso = f"{n[0]}-{n[1]:02}-{n[2]:02}" + \
+                      f"T{n[4]:02}:{n[5]:02}:{n[6]:02}Z"
+            send = str({"timestamp": {"time:": now_iso, "tz": "UTC"},
+                        "device": device.DEVICE_NAME,
+                        "temp_f": {"result": sensor.temperature_f,
+                                   "sensor": "aht20"},
+                        "humidity": {"result": sensor.humidity,
+                                     "sensor": "aht20"}})
+            print(f"Sending: {send}")
+            display.fill(0)
+            display.text(
+                f"{sensor.temperature_f}F {sensor.humidity}", 3, 3, 1)
+            display.text(f"{now_iso} UTC", 3, 13, 1)
+            display.rotate(True)
+            display.show()
+            c.publish(TOPIC, send.encode())
+            for i in range(8):
+                c.check_msg()
+                time.sleep_ms(1000)
     finally:
         c.disconnect()
 
