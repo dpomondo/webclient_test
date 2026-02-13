@@ -26,7 +26,7 @@ class aht20:
         time.sleep_ms(20)
         send_buf = bytearray(3)
         # send_buf[0] = 0xBE
-        send_buf[0] = 0xE1
+        send_buf[0] = 0xE1  # the AHT10 calibrate command, 0xBE can be used if no response
         send_buf[1] = 0x08
         send_buf[2] = 0x00
         self._i2c.writeto(self.AHT20_ADDRESS, send_buf)
